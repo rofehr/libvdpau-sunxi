@@ -1,22 +1,24 @@
+include Make.config
+
 TARGET = libvdpau_sunxi.so.1
 SRC = device.c presentation_queue.c surface_output.c surface_video.c \
 	surface_bitmap.c video_mixer.c decoder.c handles.c ve.c \
 	h264.c mpeg12.c mpeg4.c rgba.c tiled_yuv.S
-CFLAGS = -Wall -O3
-LDFLAGS =
-LIBS = -lrt -lm -lX11 -lpthread
-CC = gcc
+CFLAGS ?= -Wall -O3
+LDFLAGS ?=
+LIBS ?= -lrt -lm -lX11 -lpthread
+CC ?= gcc
 
 MAKEFLAGS += -rR --no-print-directory
 
-DEP_CFLAGS = -MD -MP -MQ $@
-LIB_CFLAGS = -fpic -fvisibility=hidden
-LIB_LDFLAGS = -shared -Wl,-soname,$(TARGET)
+DEP_CFLAGS ?= -MD -MP -MQ $@
+LIB_CFLAGS ?= -fpic -fvisibility=hidden
+LIB_LDFLAGS ?= -shared -Wl,-soname,$(TARGET)
 
 OBJ = $(addsuffix .o,$(basename $(SRC)))
 DEP = $(addsuffix .d,$(basename $(SRC)))
 
-MODULEDIR = $(shell pkg-config --variable=moduledir vdpau)
+MODULEDIR = $(shell export PKG_CONFIG_PATH=${TOOLCHAIN}/pkgconfig; pkg-config --variable=moduledir vdpau)
 
 ifeq ($(MODULEDIR),)
 MODULEDIR=/usr/lib/vdpau
