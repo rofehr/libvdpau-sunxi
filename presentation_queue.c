@@ -118,7 +118,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 	Window c;
 	int x,y;
 	XTranslateCoordinates(q->device->display, q->target->drawable, RootWindow(q->device->display, q->device->screen), 0, 0, &x, &y, &c);
-	XClearWindow(q->device->display, q->target->drawable);
+//	XClearWindow(q->device->display, q->target->drawable);
 
 	if (os->vs)
 	{
