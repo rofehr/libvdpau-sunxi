@@ -75,7 +75,6 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
                                          uint32_t clip_height,
                                          VdpTime earliest_presentation_time)
 {
-	static int i = 0;
 	queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)
 		return VDP_STATUS_INVALID_HANDLE;
@@ -90,6 +89,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	task->clip_height = clip_height;
 	task->surface = surface;
 	task->queue_id = presentation_queue;
+	os->first_presentation_time = 0;
 	os->status = VDP_PRESENTATION_QUEUE_STATUS_QUEUED;
 
 	if(q_push_tail(queue, task))
@@ -330,8 +330,8 @@ static void *presentation_thread(void *param)
 {
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
-	static output_surface_ctx_t *os_prev = NULL;
-	static output_surface_ctx_t *os_pprev = NULL;
+	output_surface_ctx_t *os_prev = NULL;
+	output_surface_ctx_t *os_pprev = NULL;
 
 	int fd_fb = 0;
 
@@ -355,16 +355,14 @@ static void *presentation_thread(void *param)
 
 				if (os_prev) /* This is the actually displayed surface */
 				{
-					os_prev->first_presentation_time = frame_time();
+					os_prev->first_presentation_time = frame_time;
 					os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
 				}
 				if (os_pprev) /* This is the previously displayed surface */
-					os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
+					os_pprev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
 
-				if (os_prev && (os_pprev != os_prev))
-					os_pprev = os_prev;
-				if (os_cur && (os_prev != os_cur))
-					os_prev = os_cur;
+				os_pprev = os_prev;
+				os_prev = os_cur;
 
 				// run the task
 				do_presentation_queue_display(task);
