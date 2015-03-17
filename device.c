@@ -40,11 +40,12 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 
 	if (!ve_open())
 	{
+		XCloseDisplay(dev->display);
 		handle_destroy(*device);
 		return VDP_STATUS_ERROR;
 	}
 
-	char *env_vdpau_osd = getenv("VDPAU_NOOSD");
+	const char *env_vdpau_osd = getenv("VDPAU_NOOSD");
 	if (env_vdpau_osd && strncmp(env_vdpau_osd, "1", 1) == 0)
 		VDPAU_DBG("OSD disabled.");
 	else
@@ -59,7 +60,7 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 			VDPAU_DBG("Failed to open /dev/g2d! OSD disabled.");
 	}
 
-	char *env_vdpau_deint = getenv("VDPAU_DEINT");
+	const char *env_vdpau_deint = getenv("VDPAU_DEINT");
 	if (env_vdpau_deint && strncmp(env_vdpau_deint, "1", 1) == 0)
 	{
 		dev->deint_enabled = 1;
