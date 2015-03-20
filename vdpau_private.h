@@ -77,6 +77,14 @@ typedef struct
 	int fd;
 	int layer;
 	int layer_top;
+	int x, y;
+	int start_flag;
+
+	int drawable_changed;
+	int drawable_x;
+	int drawable_y;
+	//int drawable_width;		// not yet needed
+	//int drawable_height;
 } queue_target_ctx_t;
 
 typedef struct
