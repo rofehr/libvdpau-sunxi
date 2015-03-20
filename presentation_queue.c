@@ -23,6 +23,7 @@
 #include <inttypes.h>
 #include <linux/fb.h>
 #include <pthread.h>
+#include <math.h>
 #include <unistd.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -323,21 +324,30 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			last_id++;
 		}
 
-		// Note: might be more reliable (but slower and problematic when there
-		// are driver issues and the GET functions return wrong values) to query the
-		// old values instead of relying on our internal csc_change.
-		// Since the driver calculates a matrix out of these values after each
-		// set doing this unconditionally is costly.
 		if (os->csc_change) {
 			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_OFF, args);
-			args[2] = 0xff * os->brightness + 0x20;
+
+			VDPAU_DBG(">bright: %g, contrast: %g, saturation: %g, hue: %g",
+			          (double)os->brightness, (double)os->contrast,
+			          (double)os->saturation, (double)os->hue);
+
+			/* scale VDPAU: -1.0 ~ 1.0 to SUNXI: 0 ~ 100 */
+			args[2] = ((os->brightness + 1.0) * 50.0) + 0.5;
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_BRIGHT, args);
-			args[2] = 0x20 * os->contrast;
+			/* scale VDPAU: 0.0 ~ 10.0 to SUNXI: 0 ~ 100 */
+			if (os->contrast <= 1.0)
+				args[2] = (os->contrast * 50.0) + 0.5;
+			else
+				args[2] = (50.0 + (os->contrast - 1.0) * 50.0 / 9.0) + 0.5;
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_CONTRAST, args);
-			args[2] = 0x20 * os->saturation;
+			/* scale VDPAU: 0.0 ~ 10.0 to SUNXI: 0 ~ 100 */
+			if (os->saturation <= 1.0)
+				args[2] = (os->saturation * 50.0) + 0.5;
+			else
+				args[2] = (50.0 + (os->saturation - 1.0) * 50.0 / 9.0) + 0.5;
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_SATURATION, args);
-			// hue scale is randomly chosen, no idea how it maps exactly
-			args[2] = (32 / 3.14) * os->hue + 0x20;
+			/* scale VDPAU: -PI ~ PI   to SUNXI: 0 ~ 100 */
+			args[2] = (((os->hue / M_PI) + 1.0) * 50.0) + 0.5;
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_HUE, args);
 			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_ON, args);
 			os->csc_change = 0;
