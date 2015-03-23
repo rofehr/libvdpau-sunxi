@@ -178,6 +178,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 		__disp_rect_t scn_win, src_win;
 
+		// Video Layer
 		// Get scn window dimension and position
 		scn_win.x = q->target->x + os->video_dst_rect.x0;
 		scn_win.y = q->target->y + os->video_dst_rect.y0;
@@ -207,6 +208,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		ioctl(q->target->fd, DISP_CMD_LAYER_SET_SRC_WINDOW, args);
 
 		q->target->drawable_changed = 0;
+		os->start_flag = 1;
 	}
 
 	if (os->vs)
@@ -214,7 +216,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		static int last_id;
 		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 
-		if (os->start_flag == 1 || q->target->start_flag == 1)
+		if (os->vs->start_flag == 1 || q->target->start_flag == 1)
 		{
 			last_id = -1; // reset the video.id
 
@@ -296,7 +298,8 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
 			ioctl(q->target->fd, DISP_CMD_VIDEO_START, args);
 
-			os->start_flag = 0; // initial run is done, only set video.addr[] in the next runs
+			os->vs->start_flag = 0; // initial run is done, only set video.addr[] in the next runs
+			os->start_flag = 1;
 			q->target->start_flag = 0;
 		}
 		else
@@ -368,43 +371,57 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 
 	if (os->rgba.flags & RGBA_FLAG_DIRTY)
 	{
-		// TOP layer
-		rgba_flush(&os->rgba);
-
-		__disp_layer_info_t layer_info;
-		memset(&layer_info, 0, sizeof(layer_info));
-		layer_info.pipe = 1;
-		layer_info.mode = DISP_LAYER_WORK_MODE_NORMAL;
-		layer_info.fb.mode = DISP_MOD_INTERLEAVED;
-		layer_info.fb.format = DISP_FORMAT_ARGB8888;
-		layer_info.fb.seq = DISP_SEQ_ARGB;
-		switch (os->rgba.format)
+		if (os->start_flag)
 		{
-		case VDP_RGBA_FORMAT_R8G8B8A8:
-			layer_info.fb.br_swap = 1;
-			break;
-		case VDP_RGBA_FORMAT_B8G8R8A8:
-		default:
-			layer_info.fb.br_swap = 0;
-			break;
+			// TOP layer
+			rgba_flush(&os->rgba);
+
+			__disp_layer_info_t layer_info;
+			memset(&layer_info, 0, sizeof(layer_info));
+			layer_info.pipe = 1;
+			layer_info.mode = DISP_LAYER_WORK_MODE_NORMAL;
+			layer_info.fb.mode = DISP_MOD_INTERLEAVED;
+			layer_info.fb.format = DISP_FORMAT_ARGB8888;
+			layer_info.fb.seq = DISP_SEQ_ARGB;
+			switch (os->rgba.format)
+			{
+			case VDP_RGBA_FORMAT_R8G8B8A8:
+				layer_info.fb.br_swap = 1;
+				break;
+			case VDP_RGBA_FORMAT_B8G8R8A8:
+			default:
+				layer_info.fb.br_swap = 0;
+				break;
+			}
+			layer_info.fb.addr[0] = ve_virt2phys(os->rgba.data) + 0x40000000;
+			layer_info.fb.cs_mode = DISP_BT601;
+			layer_info.fb.size.width = os->rgba.width;
+			layer_info.fb.size.height = os->rgba.height;
+			layer_info.src_win.x = os->rgba.dirty.x0;
+			layer_info.src_win.y = os->rgba.dirty.y0;
+			layer_info.src_win.width = os->rgba.dirty.x1 - os->rgba.dirty.x0;
+			layer_info.src_win.height = os->rgba.dirty.y1 - os->rgba.dirty.y0;
+			layer_info.scn_win.x = q->target->x + os->rgba.dirty.x0;
+			layer_info.scn_win.y = q->target->y + os->rgba.dirty.y0;
+			layer_info.scn_win.width = min_nz(clip_width, os->rgba.dirty.x1) - os->rgba.dirty.x0;
+			layer_info.scn_win.height = min_nz(clip_height, os->rgba.dirty.y1) - os->rgba.dirty.y0;
+
+			uint32_t args[4] = { 0, q->target->layer_top, (unsigned long)(&layer_info), 0 };
+			ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
+
+			ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+			os->start_flag = 0;
 		}
-		layer_info.fb.addr[0] = ve_virt2phys(os->rgba.data) + 0x40000000;
-		layer_info.fb.cs_mode = DISP_BT601;
-		layer_info.fb.size.width = os->rgba.width;
-		layer_info.fb.size.height = os->rgba.height;
-		layer_info.src_win.x = os->rgba.dirty.x0;
-		layer_info.src_win.y = os->rgba.dirty.y0;
-		layer_info.src_win.width = os->rgba.dirty.x1 - os->rgba.dirty.x0;
-		layer_info.src_win.height = os->rgba.dirty.y1 - os->rgba.dirty.y0;
-		layer_info.scn_win.x = q->target->x + os->rgba.dirty.x0;
-		layer_info.scn_win.y = q->target->y + os->rgba.dirty.y0;
-		layer_info.scn_win.width = min_nz(clip_width, os->rgba.dirty.x1) - os->rgba.dirty.x0;
-		layer_info.scn_win.height = min_nz(clip_height, os->rgba.dirty.y1) - os->rgba.dirty.y0;
-
-		uint32_t args[4] = { 0, q->target->layer_top, (unsigned long)(&layer_info), 0 };
-		ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
-
-		ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+		else
+		{
+			rgba_flush(&os->rgba);
+			__disp_layer_info_t layer_info;
+			memset(&layer_info, 0, sizeof(layer_info));
+			uint32_t args[4] = { 0, q->target->layer_top, (unsigned long)(&layer_info), 0 };
+			ioctl(q->target->fd, DISP_CMD_LAYER_GET_FB, args);
+			layer_info.fb.addr[0] = ve_virt2phys(os->rgba.data) + 0x40000000;
+			ioctl(q->target->fd, DISP_CMD_LAYER_SET_FB, args);
+		}
 	}
 	else
 	{

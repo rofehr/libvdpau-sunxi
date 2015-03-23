@@ -140,7 +140,7 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 	os->contrast = mix->contrast;
 	os->saturation = mix->saturation;
 	os->hue = mix->hue;
-	os->start_flag = mix->start_stream;
+	os->vs->start_flag = mix->start_stream;
 	mix->csc_change = 0;
 	mix->start_stream = 0;
 
